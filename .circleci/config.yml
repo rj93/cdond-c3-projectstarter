@@ -157,6 +157,9 @@ jobs:
               --query 'Reservations[*].Instances[*].PublicIpAddress' \
               --filters "Name=tag:project,Values=udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7}" \
               --output text >> inventory
+      - run:
+          name: install yar & gzip
+          command: yum install -y tar gzip
       - persist_to_workspace:
           root: ~/
           paths:
