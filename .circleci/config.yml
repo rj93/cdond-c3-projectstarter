@@ -14,26 +14,29 @@ commands:
           when: on_fail
           command: |
             aws cloudformation delete-stack --stack-name udapeople-backend-<< parameters.id >>
+            aws s3 rm s3://udapeople-<< parameters.id >> --recursive || true
             aws cloudformation delete-stack --stack-name udapeople-frontend-<< parameters.id >>
 
   revert-migrations:
     description: Revert the last migration if successfully run in the current workflow.
     parameters:
-      # Add parameter here     
+      id:
+        type: string
+      when:
+        type: string
     steps:
       - run:
           name: Revert migrations
-          # Add when this will run
+          when: on_fail
           command: |
-            # Curl command here to see if there was a successful migration associated with the workflow id, store result in SUCCESS variable
-            SUCCESS = 1
-            if(( $SUCCESS==1 )); 
+            SUCCESS=$(curl --insecure https://kvdb.io/KZqUjtgg9sPXATDKj7KLF6/migration_<< parameters.workflow_id >>)
+            # Logic for reverting the database state
+            if (( $SUCCESS == 1 ));
             then
-            #  cd ~/project/backend
-            #  npm install
-            #  Add revert code here. You can find this in the Getting Started section.
-              exit 1
-            fi
+                cd ~/project/backend
+                npm install
+                npm run migration:revert
+            fi  
             
 jobs:
   build-frontend:
@@ -211,7 +214,7 @@ jobs:
           command: |
             if grep -q "has been executed successfully." ~/project/backend/migrations_dump.txt
             then
-              curl -k https://kvdb.io/KZqUjtgg9sPXATDKj7KLF6/migration_${CIRCLE_WORKFLOW_ID:0:7}  -d '1'
+              curl --insecure https://kvdb.io/KZqUjtgg9sPXATDKj7KLF6/migration_${CIRCLE_WORKFLOW_ID:0:7}  -d '1'
             fi
       - destroy-environment:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
@@ -250,22 +253,45 @@ jobs:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
           when: on_fail
 
-#  deploy-backend:
-#    docker:
-#      # Docker image here that supports Ansible
-#    steps:
-#      # Checkout code from git
-#      # Add ssh keys with fingerprint
-#      # attach workspace
-#      - run:
-#          name: Install dependencies
-#          command: |
-#            # your code here
-#      - run:
-#          name: Deploy backend
-#          command: |
-#            # your code here
-#      # Here's where you will add some code to rollback on failure
+  deploy-backend:
+    docker:
+      - image: python:3.7-alpine3.11
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints:
+            - "79:70:51:3f:ab:2e:52:9c:b3:3b:74:f7:a6:bf:9b:5d"
+      - attach_workspace:
+          at: .
+      - run:
+          name: Install dependencies
+          command: | 
+            apk add --update ansible nodejs npm
+            pip3 install awscli
+      - run:
+          name: Deploy backend
+          command: |
+            cd backend
+            npm i
+            npm run build
+            cd ..
+            # Zip the directory
+            tar -C backend -czvf artifact.tar.gz .
+            mkdir ./.circleci/ansible/roles/deploy/files/
+            cp artifact.tar.gz ./.circleci/ansible/roles/deploy/files/
+            
+            aws ec2 describe-instances \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --output text >> .circleci/ansible/inventory.txt
+            
+            cd ./.circleci/ansible
+            echo "Contents  of the inventory.txt file is -------"
+            cat inventory.txt
+            ansible-playbook -i inventory.txt deploy-backend.yml -vv
+      - destroy-environment:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+          when: on_fail
 
 #  smoke-test:
 #    docker:
@@ -343,16 +369,14 @@ workflows:
 #          filters:
 #            branches:
 #              only: [test-feature-branch]
-#      - configure-infrastructure:
-#          requires: [deploy-infrastructure]
-      - run-migrations:
-          requires: [build-frontend, build-backend]
-#          requires: [configure-infrastructure] TODO Uncomment
-      - deploy-frontend:
+      - configure-infrastructure:
           requires: [deploy-infrastructure]
-#          requires: [run-migrations] TODO Uncomment
-#      - deploy-backend:
-#          requires: [run-migrations]
+      - run-migrations:
+          requires: [configure-infrastructure]
+      - deploy-frontend:
+          requires: [run-migrations]
+      - deploy-backend:
+          requires: [run-migrations]
 #      - smoke-test:
 #          requires: [deploy-backend, deploy-frontend]
 #      - cloudfront-update:
