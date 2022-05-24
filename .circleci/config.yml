@@ -29,7 +29,7 @@ commands:
           name: Revert migrations
           when: on_fail
           command: |
-            SUCCESS=$(curl --insecure https://kvdb.io/KZqUjtgg9sPXATDKj7KLF6/migration_<< parameters.workflow_id >>)
+            SUCCESS=$(curl --insecure https://kvdb.io/KZqUjtgg9sPXATDKj7KLF6/migration_<< parameters.id >>)
             # Logic for reverting the database state
             if (( $SUCCESS == 1 ));
             then
@@ -252,6 +252,9 @@ jobs:
       - destroy-environment:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
           when: on_fail
+      - revert-migrations:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+          when: on_fail
 
   deploy-backend:
     docker:
@@ -290,6 +293,9 @@ jobs:
             cat inventory.txt
             ansible-playbook -i inventory.txt deploy-backend.yml -vv
       - destroy-environment:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+          when: on_fail
+      - revert-migrations:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
           when: on_fail
 
@@ -336,9 +342,12 @@ jobs:
             else
               return 1
             fi
-#      - destroy-environment:
-#          id: ${CIRCLE_WORKFLOW_ID:0:7}
-#          when: on_fail
+      - destroy-environment:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+          when: on_fail
+      - revert-migrations:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+          when: on_fail
 
 #  cloudfront-update:
 #    docker:
@@ -361,6 +370,9 @@ jobs:
 #              --parameter-overrides WorkflowID="udapeople-${CIRCLE_WORKFLOW_ID:0:7}" \
 #              --tags project=udapeople
 #      - destroy-environment:
+#          id: ${CIRCLE_WORKFLOW_ID:0:7}
+#          when: on_fail
+#      - revert-migrations:
 #          id: ${CIRCLE_WORKFLOW_ID:0:7}
 #          when: on_fail
 
