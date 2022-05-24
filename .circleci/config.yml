@@ -217,27 +217,39 @@ jobs:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
           when: on_fail
 
-#  deploy-frontend:
-#    docker:
-#      # Docker image here that supports AWS CLI
-#    steps:
-#      # Checkout code from git
-#      - run:
-#          name: Install dependencies
-#          command: |
-#            # your code here
-#      - run:
-#          name: Get backend url
-#          command: |
-#            # your code here
-#            export API_URL="http://${BACKEND_IP}:3030"
-#            echo "${API_URL}"
-#      - run:
-#          name: Deploy frontend objects
-#          command: |
-#            # your code here
-#      # Here's where you will add some code to rollback on failure
-                    
+  deploy-frontend:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            curl --silent --location https://rpm.nodesource.com/setup_16.x | bash -
+            yum install -y tar gzip nodejs npm
+      - run:
+          name: Get backend url
+          command: |
+            export BACKEND_IP=$(aws ec2 describe-instances \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --output text)
+            export API_URL="http://${BACKEND_IP}:3030"
+            echo "API_URL = ${API_URL}"
+            echo API_URL="http://${BACKEND_IP}:3030" >> frontend/.env
+            cat frontend/.env
+      - run:
+          name: Deploy frontend objects
+          command: |
+            cd frontend
+            npm install
+            npm run build
+            tar -czvf artifact-"${CIRCLE_WORKFLOW_ID:0:7}".tar.gz dist
+            aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
+      - destroy-environment:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+          when: on_fail
+
 #  deploy-backend:
 #    docker:
 #      # Docker image here that supports Ansible
@@ -326,17 +338,19 @@ workflows:
 #          requires: [build-backend]  TODO Uncomment
 #      - scan-frontend:               TODO Uncomment
 #          requires: [build-frontend] TODO Uncomment
-#      - deploy-infrastructure                  TODO Uncomment
+      - deploy-infrastructure
 #          requires: [test-frontend, test-backend, scan-frontend, scan-backend] TODO Uncomment
 #          filters:
 #            branches:
 #              only: [test-feature-branch]
-#      - configure-infrastructure:              TODO Uncomment
-#          requires: [deploy-infrastructure]    TODO Uncomment
-      - run-migrations
+#      - configure-infrastructure:
+#          requires: [deploy-infrastructure]
+      - run-migrations:
+          requires: [build-frontend, build-backend]
 #          requires: [configure-infrastructure] TODO Uncomment
-#      - deploy-frontend:
-#          requires: [run-migrations]
+      - deploy-frontend:
+          requires: [deploy-infrastructure]
+#          requires: [run-migrations] TODO Uncomment
 #      - deploy-backend:
 #          requires: [run-migrations]
 #      - smoke-test:
