@@ -194,22 +194,28 @@ jobs:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
           when: on_fail
 
-#  run-migrations:
-#    docker:
-#      # Docker image here that supports NodeJS
-#    steps:
-#      # Checkout code from git
-#      - run:
-#          name: Run migrations
-#          command: |
-#            # Your code here
-#            exit 1
-#      - run:
-#          name: Send migration results to memstash
-#          command: |
-#            # Your code here
-#            exit 1
-#     # Here's where you will add some code to rollback on failure
+  run-migrations:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - run:
+          name: Run migrations
+          command: |
+            cd backend
+            npm install
+            # Run and save the migration output
+            npm run migrations > migrations_dump.txt
+      - run:
+          name: Send migration results to kvdb
+          command: |
+            if grep -q "has been executed successfully." ~/project/backend/migrations_dump.txt
+            then
+              curl -k https://kvdb.io/KZqUjtgg9sPXATDKj7KLF6/migration_${CIRCLE_WORKFLOW_ID:0:7}  -d '1'
+            fi
+      - destroy-environment:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+          when: on_fail
 
 #  deploy-frontend:
 #    docker:
@@ -320,15 +326,15 @@ workflows:
 #          requires: [build-backend]  TODO Uncomment
 #      - scan-frontend:               TODO Uncomment
 #          requires: [build-frontend] TODO Uncomment
-      - deploy-infrastructure
+#      - deploy-infrastructure                  TODO Uncomment
 #          requires: [test-frontend, test-backend, scan-frontend, scan-backend] TODO Uncomment
 #          filters:
 #            branches:
 #              only: [test-feature-branch]
-      - configure-infrastructure:
-          requires: [deploy-infrastructure]
-#      - run-migrations:
-#          requires: [configure-infrastructure]
+#      - configure-infrastructure:              TODO Uncomment
+#          requires: [deploy-infrastructure]    TODO Uncomment
+      - run-migrations
+#          requires: [configure-infrastructure] TODO Uncomment
 #      - deploy-frontend:
 #          requires: [run-migrations]
 #      - deploy-backend:
