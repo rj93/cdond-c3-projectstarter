@@ -436,19 +436,19 @@ workflows:
     jobs:
       - build-frontend
       - build-backend
-#      - test-frontend:               TODO Uncomment
-#          requires: [build-frontend] TODO Uncomment
-#      - test-backend:                TODO Uncomment
-#          requires: [build-backend]  TODO Uncomment
-#      - scan-backend:                TODO Uncomment
-#          requires: [build-backend]  TODO Uncomment
-#      - scan-frontend:               TODO Uncomment
-#          requires: [build-frontend] TODO Uncomment
-      - deploy-infrastructure
-#          requires: [test-frontend, test-backend, scan-frontend, scan-backend] TODO Uncomment
-#          filters:
-#            branches:
-#              only: [master]
+      - test-frontend:
+          requires: [build-frontend]
+      - test-backend:
+          requires: [build-backend]
+      - scan-backend:
+          requires: [build-backend]
+      - scan-frontend:
+          requires: [build-frontend]
+      - deploy-infrastructure:
+          requires: [test-frontend, test-backend, scan-frontend, scan-backend]
+          filters:
+            branches:
+              only: [master]
       - configure-infrastructure:
           requires: [deploy-infrastructure]
       - run-migrations:
